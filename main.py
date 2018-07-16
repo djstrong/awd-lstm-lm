@@ -8,7 +8,8 @@ import torch.nn as nn
 import data
 import model
 
-from utils import batchify, get_batch, repackage_hidden
+from utils import batchify, get_batch, repackage_hidden, show_memusage
+
 
 parser = argparse.ArgumentParser(description='PyTorch PennTreeBank RNN/LSTM Language Model')
 parser.add_argument('--data', type=str, default='data/penn/',
@@ -64,6 +65,8 @@ parser.add_argument('--optimizer', type=str,  default='sgd',
                     help='optimizer to use (sgd, adam)')
 parser.add_argument('--when', nargs="+", type=int, default=[-1],
                     help='When (which epochs) to divide the learning rate by 10 - accepts multiple')
+parser.add_argument('--verbose', action='store_true',
+                    help='verbose')
 args = parser.parse_args()
 args.tied = True
 
@@ -148,6 +151,7 @@ params = list(model.parameters()) + list(criterion.parameters())
 total_params = sum(x.size()[0] * x.size()[1] if len(x.size()) > 1 else x.size()[0] for x in params if x.size())
 print('Args:', args)
 print('Model total parameters:', total_params)
+print("GPU memory with model: %s MB" % show_memusage())
 
 ###############################################################################
 # Training code
@@ -168,7 +172,7 @@ def evaluate(data_source, batch_size=10):
     return total_loss.item() / len(data_source)
 
 
-def train():
+def train(verbose=False):
     # Turn on training mode which enables dropout.
     if args.model == 'QRNN': model.reset()
     total_loss = 0
@@ -186,6 +190,12 @@ def train():
         lr2 = optimizer.param_groups[0]['lr']
         optimizer.param_groups[0]['lr'] = lr2 * seq_len / args.bptt
         model.train()
+        
+        if verbose:
+            print("GPU memory before empty_cache: %s MB" % show_memusage())
+            torch.cuda.empty_cache()
+            print("GPU memory after empty_cache: %s MB" % show_memusage())
+        
         data, targets = get_batch(train_data, i, args, seq_len=seq_len)
 
         # Starting each batch, we detach the hidden state from how it was previously produced.
@@ -237,7 +247,7 @@ try:
         optimizer = torch.optim.Adam(params, lr=args.lr, weight_decay=args.wdecay)
     for epoch in range(1, args.epochs+1):
         epoch_start_time = time.time()
-        train()
+        train(verbose=args.verbose)
         if 't0' in optimizer.param_groups[0]:
             tmp = {}
             for prm in model.parameters():

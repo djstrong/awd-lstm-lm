@@ -17,8 +17,7 @@ def batchify(data, bsz, args):
     data = data.narrow(0, 0, nbatch * bsz)
     # Evenly divide the data across the bsz batches.
     data = data.view(bsz, -1).t().contiguous()
-    if args.cuda:
-        data = data.cuda()
+    data = data.pin_memory()
     return data
 
 
@@ -26,4 +25,10 @@ def get_batch(source, i, args, seq_len=None, evaluation=False):
     seq_len = min(seq_len if seq_len else args.bptt, len(source) - 1 - i)
     data = source[i:i+seq_len]
     target = source[i+1:i+1+seq_len].view(-1)
-    return data, target
+    return data.cuda(non_blocking=True), target.cuda(non_blocking=True)
+
+import gpustat
+def show_memusage(device=0):
+    gpu_stats = gpustat.GPUStatCollection.new_query()
+    item = gpu_stats.jsonify()["gpus"][device]
+    return "{}/{}".format(item["memory.used"], item["memory.total"])
