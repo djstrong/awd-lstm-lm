@@ -144,8 +144,10 @@ if not criterion:
     criterion = SplitCrossEntropyLoss(args.emsize, splits=splits, verbose=False)
 ###
 if args.cuda:
-    model = model.cuda()
-    criterion = criterion.cuda()
+    #model = model.cuda()
+    model_pre=model
+    model = nn.DataParallel(model).cuda()
+    criterion = nn.DataParallel(criterion).cuda()
 ###
 params = list(model.parameters()) + list(criterion.parameters())
 total_params = sum(x.size()[0] * x.size()[1] if len(x.size()) > 1 else x.size()[0] for x in params if x.size())
@@ -178,7 +180,7 @@ def train(verbose=False):
     total_loss = 0
     start_time = time.time()
     ntokens = len(corpus.dictionary)
-    hidden = model.init_hidden(args.batch_size)
+    hidden = model.module.init_hidden(args.batch_size)
     batch, i = 0, 0
     while i < train_data.size(0) - 1 - 1:
         bptt = args.bptt if np.random.random() < 0.95 else args.bptt / 2.
@@ -203,8 +205,8 @@ def train(verbose=False):
         hidden = repackage_hidden(hidden)
         optimizer.zero_grad()
 
-        output, hidden, rnn_hs, dropped_rnn_hs = model(data, hidden, return_h=True)
-        raw_loss = criterion(model.decoder.weight, model.decoder.bias, output, targets)
+        output, hidden, rnn_hs, dropped_rnn_hs = model(input=data, hidden=hidden, return_h=True)
+        raw_loss = criterion(model.module.decoder.weight, model.module.decoder.bias, output, targets)
 
         loss = raw_loss
         # Activiation Regularization
